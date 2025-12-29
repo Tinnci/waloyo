@@ -1,14 +1,44 @@
 use crate::domain::{Task, TaskId, TaskState};
+use crate::infrastructure::TaskStorage;
 
 /// Service for managing tasks
 /// This represents the application's use cases for task management
 pub struct TaskService {
     tasks: Vec<Task>,
+    storage: TaskStorage,
 }
 
 impl TaskService {
     pub fn new() -> Self {
-        Self { tasks: Vec::new() }
+        let storage = TaskStorage::new();
+        let tasks = storage.load().unwrap_or_default();
+
+        Self { tasks, storage }
+    }
+
+    /// Create with demo tasks (for first time use)
+    pub fn new_with_defaults() -> Self {
+        let storage = TaskStorage::new();
+        let tasks = storage.load().unwrap_or_default();
+
+        // Only add demo tasks if storage is empty
+        if tasks.is_empty() {
+            let mut service = Self { tasks, storage };
+            service.add_task("Learn GPUI fundamentals");
+            service.add_task("Build Waloyo task manager");
+            service.add_task("Implement rain drop animation");
+            service.add_task("Add wind swaying effect");
+            service.add_task("Create clear sky celebration");
+            return service;
+        }
+
+        Self { tasks, storage }
+    }
+
+    fn save(&self) {
+        if let Err(e) = self.storage.save(&self.tasks) {
+            eprintln!("Failed to save tasks: {}", e);
+        }
     }
 
     /// Add a new task
@@ -16,15 +46,18 @@ impl TaskService {
         let task = Task::new(content);
         let id = task.id;
         self.tasks.push(task);
+        self.save();
         id
     }
 
     /// Get all pending tasks
+    #[allow(dead_code)]
     pub fn pending_tasks(&self) -> impl Iterator<Item = &Task> {
         self.tasks.iter().filter(|t| t.state == TaskState::Pending)
     }
 
     /// Get all completed tasks
+    #[allow(dead_code)]
     pub fn completed_tasks(&self) -> impl Iterator<Item = &Task> {
         self.tasks.iter().filter(|t| t.state == TaskState::Done)
     }
@@ -48,6 +81,7 @@ impl TaskService {
     pub fn finish_completing(&mut self, id: TaskId) -> bool {
         if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
             task.complete();
+            self.save();
             true
         } else {
             false
@@ -57,7 +91,9 @@ impl TaskService {
     /// Remove a task
     pub fn remove_task(&mut self, id: TaskId) -> Option<Task> {
         if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
-            Some(self.tasks.remove(pos))
+            let task = self.tasks.remove(pos);
+            self.save();
+            Some(task)
         } else {
             None
         }
@@ -81,6 +117,6 @@ impl TaskService {
 
 impl Default for TaskService {
     fn default() -> Self {
-        Self::new()
+        Self::new_with_defaults()
     }
 }

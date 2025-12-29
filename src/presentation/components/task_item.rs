@@ -14,6 +14,7 @@ use std::time::Duration;
 pub struct TaskItem {
     task: Task,
     on_complete: Option<Box<dyn Fn(TaskId, &mut Window, &mut App) + 'static>>,
+    on_delete: Option<Box<dyn Fn(TaskId, &mut Window, &mut App) + 'static>>,
 }
 
 impl TaskItem {
@@ -21,6 +22,7 @@ impl TaskItem {
         Self {
             task,
             on_complete: None,
+            on_delete: None,
         }
     }
 
@@ -29,6 +31,11 @@ impl TaskItem {
         handler: impl Fn(TaskId, &mut Window, &mut App) + 'static,
     ) -> Self {
         self.on_complete = Some(Box::new(handler));
+        self
+    }
+
+    pub fn on_delete(mut self, handler: impl Fn(TaskId, &mut Window, &mut App) + 'static) -> Self {
+        self.on_delete = Some(Box::new(handler));
         self
     }
 
@@ -46,11 +53,29 @@ impl TaskItem {
             .bg(bg_color)
             .flex_shrink_0()
     }
+
+    fn render_delete_button(&self, task_id: TaskId) -> Option<impl IntoElement> {
+        self.on_delete.as_ref().map(|_| {
+            div()
+                .id(ElementId::Name(format!("delete-{}", task_id.0).into()))
+                .w(px(24.0))
+                .h(px(24.0))
+                .rounded(px(4.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .text_color(Theme::text_secondary())
+                .hover(|s| s.bg(rgba(0xff000020)).text_color(Theme::accent_error()))
+                .child("×")
+        })
+    }
 }
 
 impl RenderOnce for TaskItem {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let task_id = self.task.id;
+        let is_pending = self.task.is_pending();
         let is_completing = self.task.is_completing();
         let is_done = self.task.is_done();
 
@@ -66,6 +91,7 @@ impl RenderOnce for TaskItem {
             Theme::surface()
         };
 
+        // Build the base card
         let base = div()
             .w_full()
             .px(px(Theme::PADDING_MD))
@@ -88,32 +114,85 @@ impl RenderOnce for TaskItem {
                     .child(self.task.content.clone()),
             );
 
-        let base_with_id = base.id(ElementId::Name(format!("task-static-{}", task_id.0).into()));
+        // Add delete button for non-completing tasks
+        let base = if !is_completing {
+            if let Some(delete_btn) = self.render_delete_button(task_id) {
+                base.child(delete_btn)
+            } else {
+                base
+            }
+        } else {
+            base
+        };
 
-        // Add rain drop animation when completing
+        let base_with_id = base.id(ElementId::Name(format!("task-{}", task_id.0).into()));
+
+        // Apply different animations based on state
         if is_completing {
+            // Rain Drop animation - fall down and fade
             base_with_id
                 .with_animation(
                     ElementId::Name(format!("rain-drop-{}", task_id.0).into()),
                     Animation::new(Duration::from_millis(Theme::ANIM_RAIN_DROP))
                         .with_easing(ease_in_out),
                     move |element, delta| {
-                        // Rain drop effect: fall down and fade out
                         let fall_distance = 80.0 * delta;
                         let opacity_val = 1.0 - (delta * 0.7);
-
                         element.mt(px(fall_distance)).opacity(opacity_val)
                     },
                 )
                 .into_any_element()
-        } else if let Some(handler) = self.on_complete {
+        } else if is_pending {
+            // Wind Sway animation - gentle horizontal oscillation
+            let on_complete = self.on_complete;
+            let on_delete = self.on_delete;
+
             base_with_id
-                .on_click(move |_event, window, cx| {
-                    handler(task_id, window, cx);
+                .with_animation(
+                    ElementId::Name(format!("wind-sway-{}", task_id.0).into()),
+                    Animation::new(Duration::from_millis(3000))
+                        .repeat()
+                        .with_easing(pulsating_between(-1.0, 1.0)),
+                    move |element, delta| {
+                        // Gentle sway: -3px to +3px horizontal offset
+                        let sway_offset = delta * 3.0;
+                        element.ml(px(sway_offset))
+                    },
+                )
+                .map_element(move |element| {
+                    let element = if let Some(handler) = on_complete {
+                        element.on_click(move |_event, window, cx| {
+                            handler(task_id, window, cx);
+                        })
+                    } else {
+                        element
+                    };
+
+                    // Handle delete click on the delete button
+                    if let Some(handler) = on_delete {
+                        element.on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                            // Check if click is on delete button area (right side)
+                            // This is a simplified check - in production you'd use proper hit testing
+                            if event.position.x > px(350.0) {
+                                handler(task_id, window, cx);
+                            }
+                        })
+                    } else {
+                        element
+                    }
                 })
                 .into_any_element()
         } else {
-            base_with_id.into_any_element()
+            // Done state - static, no animation
+            if let Some(handler) = self.on_complete {
+                base_with_id
+                    .on_click(move |_event, window, cx| {
+                        handler(task_id, window, cx);
+                    })
+                    .into_any_element()
+            } else {
+                base_with_id.into_any_element()
+            }
         }
     }
 }
