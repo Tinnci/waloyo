@@ -6,20 +6,15 @@ use std::time::Instant;
 /// - Pending: Like wind, tasks are unsettled and in motion
 /// - Completing: The rain falls, washing away the task  
 /// - Done: Clear skies, the task has been overcome
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TaskState {
     /// Task is pending - represented as "wind" in the UI
+    #[default]
     Pending,
     /// Task is being completed - the "rain drop" animation plays
     Completing,
     /// Task is done - moved to the "ocean" of completed tasks
     Done,
-}
-
-impl Default for TaskState {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// A unique identifier for a task

@@ -1,8 +1,12 @@
 use crate::domain::{Task, TaskId, TaskState};
 use crate::presentation::theme::Theme;
-use gpui::prelude::FluentBuilder;
+use gpui::prelude::*; // Import prelude for InteractiveElement (on_click)
 use gpui::*;
+use std::f32::consts::PI;
 use std::time::Duration;
+
+/// Type alias for task event handlers
+pub type TaskEventHandler = Box<dyn Fn(TaskId, &mut Window, &mut App) + 'static>;
 
 /// A single task item component - the "wind" element
 ///
@@ -13,8 +17,9 @@ use std::time::Duration;
 #[derive(IntoElement)]
 pub struct TaskItem {
     task: Task,
-    on_complete: Option<Box<dyn Fn(TaskId, &mut Window, &mut App) + 'static>>,
-    on_delete: Option<Box<dyn Fn(TaskId, &mut Window, &mut App) + 'static>>,
+    on_complete: Option<TaskEventHandler>,
+    on_delete: Option<TaskEventHandler>,
+    on_click_content: Option<TaskEventHandler>,
 }
 
 impl TaskItem {
@@ -23,6 +28,7 @@ impl TaskItem {
             task,
             on_complete: None,
             on_delete: None,
+            on_click_content: None,
         }
     }
 
@@ -36,6 +42,14 @@ impl TaskItem {
 
     pub fn on_delete(mut self, handler: impl Fn(TaskId, &mut Window, &mut App) + 'static) -> Self {
         self.on_delete = Some(Box::new(handler));
+        self
+    }
+
+    pub fn on_click_content(
+        mut self,
+        handler: impl Fn(TaskId, &mut Window, &mut App) + 'static,
+    ) -> Self {
+        self.on_click_content = Some(Box::new(handler));
         self
     }
 
@@ -72,6 +86,15 @@ impl TaskItem {
     }
 }
 
+/// Wind sway easing function - oscillates smoothly between 0 and 1
+fn wind_sway_easing(delta: f32) -> f32 {
+    // Use sine wave to create smooth oscillation
+    // Maps 0..1 to 0..2π for one complete cycle
+    // Then maps -1..1 back to 0..1 range for the animation system
+    let oscillation = (delta * 2.0 * PI).sin();
+    (oscillation + 1.0) / 2.0 // Map from -1..1 to 0..1
+}
+
 impl RenderOnce for TaskItem {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let task_id = self.task.id;
@@ -91,8 +114,83 @@ impl RenderOnce for TaskItem {
             Theme::surface()
         };
 
+        // Prepare handlers - wrap in Arc to allow sharing in closures
+        let on_complete = self.on_complete.map(std::sync::Arc::new);
+        let on_delete = self.on_delete.map(std::sync::Arc::new);
+        let on_click_content = self.on_click_content.map(std::sync::Arc::new);
+
+        // Build state indicator
+        let mut indicator = div()
+            .w(px(if is_completing { 14.0 } else { 12.0 }))
+            .h(px(if is_completing { 14.0 } else { 12.0 }))
+            .rounded_full()
+            .bg(if is_completing {
+                Theme::state_completing()
+            } else if is_done {
+                Theme::state_done()
+            } else {
+                Theme::state_pending()
+            })
+            .flex_shrink_0();
+
+        if is_pending {
+            if let Some(handler) = on_complete.clone() {
+                indicator = indicator.cursor_pointer().on_mouse_down(
+                    MouseButton::Left,
+                    move |_event, window, cx| {
+                        handler(task_id, window, cx);
+                    },
+                );
+            }
+        }
+
+        // Build Content Area
+        let mut content_area = div()
+            .flex_1()
+            .text_color(content_color)
+            .when(is_done, |this| this.line_through())
+            .child(self.task.content.clone());
+
+        if is_pending {
+            if let Some(handler) = on_click_content.clone() {
+                content_area = content_area.cursor_pointer().on_mouse_down(
+                    MouseButton::Left,
+                    move |_event, window, cx| {
+                        handler(task_id, window, cx);
+                    },
+                );
+            }
+        }
+
+        // Build Delete Button
+        let delete_btn = if !is_completing {
+            if let Some(handler) = on_delete.clone() {
+                Some(
+                    div()
+                        .id(ElementId::Name(format!("delete-{}", task_id.0).into()))
+                        .w(px(24.0))
+                        .h(px(24.0))
+                        .rounded(px(4.0))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .text_color(Theme::text_secondary())
+                        .hover(|s| s.bg(rgba(0xff000020)).text_color(Theme::accent_error()))
+                        .child("×")
+                        .on_mouse_down(MouseButton::Left, move |_event, window, cx| {
+                            handler(task_id, window, cx);
+                        }),
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Build the base card
-        let base = div()
+        let mut base = div()
             .w_full()
             .px(px(Theme::PADDING_MD))
             .py(px(Theme::PADDING_SM))
@@ -100,30 +198,16 @@ impl RenderOnce for TaskItem {
             .rounded(px(Theme::RADIUS_MD))
             .border_1()
             .border_color(rgba(0xffffff10))
-            .cursor_pointer()
             .hover(|style| style.bg(Theme::surface_hover()))
             .flex()
             .items_center()
             .gap(px(Theme::PADDING_SM))
-            .child(self.state_indicator())
-            .child(
-                div()
-                    .flex_1()
-                    .text_color(content_color)
-                    .when(is_done, |this| this.line_through())
-                    .child(self.task.content.clone()),
-            );
+            .child(indicator)
+            .child(content_area);
 
-        // Add delete button for non-completing tasks
-        let base = if !is_completing {
-            if let Some(delete_btn) = self.render_delete_button(task_id) {
-                base.child(delete_btn)
-            } else {
-                base
-            }
-        } else {
-            base
-        };
+        if let Some(btn) = delete_btn {
+            base = base.child(btn);
+        }
 
         let base_with_id = base.id(ElementId::Name(format!("task-{}", task_id.0).into()));
 
@@ -143,56 +227,22 @@ impl RenderOnce for TaskItem {
                 )
                 .into_any_element()
         } else if is_pending {
-            // Wind Sway animation - gentle horizontal oscillation
-            let on_complete = self.on_complete;
-            let on_delete = self.on_delete;
-
+            // Wind Sway animation
             base_with_id
                 .with_animation(
                     ElementId::Name(format!("wind-sway-{}", task_id.0).into()),
                     Animation::new(Duration::from_millis(3000))
                         .repeat()
-                        .with_easing(pulsating_between(-1.0, 1.0)),
+                        .with_easing(wind_sway_easing),
                     move |element, delta| {
-                        // Gentle sway: -3px to +3px horizontal offset
-                        let sway_offset = delta * 3.0;
+                        let sway_offset = (delta - 0.5) * 6.0;
                         element.ml(px(sway_offset))
                     },
                 )
-                .map_element(move |element| {
-                    let element = if let Some(handler) = on_complete {
-                        element.on_click(move |_event, window, cx| {
-                            handler(task_id, window, cx);
-                        })
-                    } else {
-                        element
-                    };
-
-                    // Handle delete click on the delete button
-                    if let Some(handler) = on_delete {
-                        element.on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                            // Check if click is on delete button area (right side)
-                            // This is a simplified check - in production you'd use proper hit testing
-                            if event.position.x > px(350.0) {
-                                handler(task_id, window, cx);
-                            }
-                        })
-                    } else {
-                        element
-                    }
-                })
                 .into_any_element()
         } else {
-            // Done state - static, no animation
-            if let Some(handler) = self.on_complete {
-                base_with_id
-                    .on_click(move |_event, window, cx| {
-                        handler(task_id, window, cx);
-                    })
-                    .into_any_element()
-            } else {
-                base_with_id.into_any_element()
-            }
+            // Done state
+            base_with_id.into_any_element()
         }
     }
 }

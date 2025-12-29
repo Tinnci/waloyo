@@ -13,6 +13,9 @@ pub struct TaskListView {
     #[allow(dead_code)]
     completing_task: Option<TaskId>,
     clear_sky_celebration: bool,
+    editing_task: Option<TaskId>,
+    editing_buffer: SharedString,
+    edit_focus_handle: FocusHandle,
 }
 
 impl TaskListView {
@@ -28,12 +31,16 @@ impl TaskListView {
 
         // Load tasks from storage (or create demo tasks if empty)
         let service = TaskService::default();
+        let edit_focus_handle = cx.focus_handle();
 
         Self {
             task_service: service,
             task_input,
             completing_task: None,
             clear_sky_celebration: false,
+            editing_task: None,
+            editing_buffer: "".into(),
+            edit_focus_handle,
         }
     }
 
@@ -42,6 +49,28 @@ impl TaskListView {
         // Adding a task means we're no longer in clear sky
         self.clear_sky_celebration = false;
         cx.notify();
+    }
+
+    fn start_editing(&mut self, task_id: TaskId, content: SharedString, cx: &mut Context<Self>) {
+        self.editing_task = Some(task_id);
+        self.editing_buffer = content;
+        cx.notify();
+    }
+
+    fn cancel_editing(&mut self, cx: &mut Context<Self>) {
+        self.editing_task = None;
+        self.editing_buffer = "".into();
+        cx.notify();
+    }
+
+    fn save_editing(&mut self, cx: &mut Context<Self>) {
+        if let Some(task_id) = self.editing_task {
+            if !self.editing_buffer.is_empty() {
+                self.task_service
+                    .update_task_content(task_id, self.editing_buffer.clone());
+            }
+        }
+        self.cancel_editing(cx);
     }
 
     fn delete_task(&mut self, task_id: TaskId, cx: &mut Context<Self>) {
@@ -125,6 +154,75 @@ impl TaskListView {
             ))
     }
 
+    fn render_edit_input(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let focus_handle = self.edit_focus_handle.clone();
+
+        div()
+            .w_full()
+            .px(px(Theme::PADDING_MD))
+            .py(px(Theme::PADDING_SM))
+            .bg(Theme::surface())
+            .rounded(px(Theme::RADIUS_MD))
+            .border_1()
+            .border_color(Theme::accent_primary())
+            .flex()
+            .items_center()
+            .gap(px(Theme::PADDING_SM))
+            .child(
+                div()
+                    .w(px(12.0))
+                    .h(px(12.0))
+                    .rounded_full()
+                    .bg(Theme::state_pending())
+                    .opacity(0.5),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .track_focus(&focus_handle)
+                    .text_color(Theme::text_primary())
+                    .child(self.editing_buffer.clone())
+                    .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                        match &event.keystroke.key {
+                            key if key == "enter" => {
+                                this.save_editing(cx);
+                            }
+                            key if key == "escape" => {
+                                this.cancel_editing(cx);
+                            }
+                            key if key == "backspace" => {
+                                let mut s = this.editing_buffer.to_string();
+                                s.pop();
+                                this.editing_buffer = s.into();
+                                cx.notify();
+                            }
+                            key if key == "space" => {
+                                let mut s = this.editing_buffer.to_string();
+                                s.push(' ');
+                                this.editing_buffer = s.into();
+                                cx.notify();
+                            }
+                            key if key.len() == 1 => {
+                                let mut s = this.editing_buffer.to_string();
+                                if event.keystroke.modifiers.shift {
+                                    s.push_str(&key.to_uppercase());
+                                } else {
+                                    s.push_str(key);
+                                }
+                                this.editing_buffer = s.into();
+                                cx.notify();
+                            }
+                            _ => {}
+                        }
+                    })), // Save on blur - wait, on_blur triggers when clicking ANYTHING else, including save button if we had one.
+                         // But here clicking outside cancels? Or saves?
+                         // Typically click outside saves.
+                         // .on_blur(cx.listener(|this, _, _, cx| {
+                         // this.save_editing(cx);
+                         // }))
+            )
+    }
+
     fn render_task_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let tasks: Vec<_> = self.task_service.all_tasks().to_vec();
         let entity = cx.entity().downgrade();
@@ -136,6 +234,7 @@ impl TaskListView {
                 .id("task-list-container")
                 .w_full()
                 .flex_1()
+                // ... (abbreviated, keeping original logic)
                 .flex()
                 .items_center()
                 .justify_center()
@@ -167,19 +266,29 @@ impl TaskListView {
                 move |task| {
                     let entity_complete = entity.clone();
                     let entity_delete = entity.clone();
-                    let task_id = task.id;
+                    let entity_edit = entity.clone();
 
-                    TaskItem::new(task)
-                        .on_complete(move |id, _window, cx| {
-                            let _ = entity_complete.update(cx, |view, cx| {
-                                view.handle_task_click(id, cx);
-                            });
-                        })
-                        .on_delete(move |id, _window, cx| {
-                            let _ = entity_delete.update(cx, |view, cx| {
-                                view.delete_task(id, cx);
-                            });
-                        })
+                    if Some(task.id) == self.editing_task {
+                        self.render_edit_input(cx).into_any_element()
+                    } else {
+                        TaskItem::new(task.clone())
+                            .on_complete(move |id, _window, cx| {
+                                let _ = entity_complete.update(cx, |view, cx| {
+                                    view.handle_task_click(id, cx);
+                                });
+                            })
+                            .on_click_content(move |id, _window, cx| {
+                                let _ = entity_edit.update(cx, |view, cx| {
+                                    view.start_editing(id, task.content.clone(), cx);
+                                });
+                            })
+                            .on_delete(move |id, _window, cx| {
+                                let _ = entity_delete.update(cx, |view, cx| {
+                                    view.delete_task(id, cx);
+                                });
+                            })
+                            .into_any_element()
+                    }
                 }
             }))
             .into_any_element()
@@ -212,7 +321,7 @@ impl TaskListView {
                     .mb_2()
                     .child(format!("✓ Overcome ({})", completed_tasks.len())),
             )
-            .children(completed_tasks.into_iter().map(|task| TaskItem::new(task)))
+            .children(completed_tasks.into_iter().map(TaskItem::new))
             .into_any_element()
     }
 
@@ -261,5 +370,14 @@ impl Render for TaskListView {
             .child(self.task_input.clone())
             .child(self.render_task_list(cx))
             .child(self.render_completed_section())
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _window, cx| {
+                // Ctrl+Z for Undo
+                if event.keystroke.modifiers.control && event.keystroke.key == "z" {
+                    if this.task_service.undo() {
+                        this.check_clear_sky(cx);
+                        cx.notify();
+                    }
+                }
+            }))
     }
 }

@@ -1,11 +1,20 @@
 use crate::domain::{Task, TaskId, TaskState};
 use crate::infrastructure::TaskStorage;
 
+#[derive(Clone)]
+enum TaskAction {
+    Add(TaskId),
+    Remove(Task),
+    UpdateContent(TaskId, gpui::SharedString), // Stores OLD content
+    Complete(TaskId),
+}
+
 /// Service for managing tasks
 /// This represents the application's use cases for task management
 pub struct TaskService {
     tasks: Vec<Task>,
     storage: TaskStorage,
+    history: Vec<TaskAction>,
 }
 
 impl TaskService {
@@ -13,7 +22,11 @@ impl TaskService {
         let storage = TaskStorage::new();
         let tasks = storage.load().unwrap_or_default();
 
-        Self { tasks, storage }
+        Self {
+            tasks,
+            storage,
+            history: Vec::new(),
+        }
     }
 
     /// Create with demo tasks (for first time use)
@@ -23,16 +36,26 @@ impl TaskService {
 
         // Only add demo tasks if storage is empty
         if tasks.is_empty() {
-            let mut service = Self { tasks, storage };
+            let mut service = Self {
+                tasks,
+                storage,
+                history: Vec::new(),
+            };
             service.add_task("Learn GPUI fundamentals");
             service.add_task("Build Waloyo task manager");
             service.add_task("Implement rain drop animation");
             service.add_task("Add wind swaying effect");
             service.add_task("Create clear sky celebration");
+            // Clear history after initial defaults to avoid undoing them
+            service.history.clear();
             return service;
         }
 
-        Self { tasks, storage }
+        Self {
+            tasks,
+            storage,
+            history: Vec::new(),
+        }
     }
 
     fn save(&self) {
@@ -46,8 +69,31 @@ impl TaskService {
         let task = Task::new(content);
         let id = task.id;
         self.tasks.push(task);
+        self.history.push(TaskAction::Add(id));
         self.save();
         id
+    }
+
+    /// Update task content
+    pub fn update_task_content(
+        &mut self,
+        id: TaskId,
+        content: impl Into<gpui::SharedString>,
+    ) -> bool {
+        let content = content.into();
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
+            let old_content = task.content.clone();
+            if old_content != content {
+                self.history
+                    .push(TaskAction::UpdateContent(id, old_content));
+                task.content = content;
+                task.updated_at = std::time::Instant::now();
+                self.save();
+            }
+            true
+        } else {
+            false
+        }
     }
 
     /// Get all pending tasks
@@ -81,6 +127,7 @@ impl TaskService {
     pub fn finish_completing(&mut self, id: TaskId) -> bool {
         if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
             task.complete();
+            self.history.push(TaskAction::Complete(id));
             self.save();
             true
         } else {
@@ -92,10 +139,43 @@ impl TaskService {
     pub fn remove_task(&mut self, id: TaskId) -> Option<Task> {
         if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
             let task = self.tasks.remove(pos);
+            self.history.push(TaskAction::Remove(task.clone()));
             self.save();
             Some(task)
         } else {
             None
+        }
+    }
+
+    /// Undo last action
+    pub fn undo(&mut self) -> bool {
+        if let Some(action) = self.history.pop() {
+            match action {
+                TaskAction::Add(id) => {
+                    if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
+                        self.tasks.remove(pos);
+                    }
+                }
+                TaskAction::Remove(task) => {
+                    self.tasks.push(task);
+                }
+                TaskAction::UpdateContent(id, old_content) => {
+                    if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
+                        task.content = old_content;
+                        task.updated_at = std::time::Instant::now();
+                    }
+                }
+                TaskAction::Complete(id) => {
+                    if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
+                        task.state = TaskState::Pending;
+                        task.updated_at = std::time::Instant::now();
+                    }
+                }
+            }
+            self.save();
+            true
+        } else {
+            false
         }
     }
 
