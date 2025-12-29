@@ -1,5 +1,6 @@
 use crate::application::TaskService;
 use crate::domain::{TaskId, TaskSubmitted};
+use crate::presentation::animations::WaloyoAnimations;
 use crate::presentation::components::{TaskInput, TaskItem};
 use crate::presentation::theme::Theme;
 use gpui::*;
@@ -326,25 +327,11 @@ impl TaskListView {
     }
 
     fn render_clear_sky_celebration(&self) -> impl IntoElement {
-        if !self.clear_sky_celebration {
-            return div().into_any_element();
-        }
-
-        // Simple celebration overlay that fades in
         div()
             .id("clear-sky-celebration")
             .absolute()
             .inset_0()
-            .with_animation(
-                "clear-sky-anim",
-                Animation::new(Duration::from_millis(2000)).with_easing(ease_in_out),
-                |element, delta| {
-                    // Fade in a subtle golden glow effect
-                    let opacity = delta * 0.08;
-                    element.bg(rgba(0xffc77700 + ((opacity * 255.0) as u32)))
-                },
-            )
-            .into_any_element()
+            .clear_sky("clear-sky-anim", self.clear_sky_celebration)
     }
 }
 
