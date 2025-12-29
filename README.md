@@ -86,6 +86,7 @@ waloyo_app/
 │       ├── components/         # 可复用UI组件
 │       └── views/              # 视图/页面
 └── docs/
+    ├── PHILOSOPHY.md           # 哲学框架 ← 核心阅读
     ├── ARCHITECTURE.md         # 架构决策记录
     ├── DESIGN.md               # 设计语言文档
     └── STYLE_GUIDE.md          # 代码风格指南
