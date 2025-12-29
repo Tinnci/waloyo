@@ -25,7 +25,7 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            |_window, cx| cx.new(|_cx| TaskListView::new()),
+            |_window, cx| cx.new(|cx| TaskListView::new(cx)),
         );
     });
 }

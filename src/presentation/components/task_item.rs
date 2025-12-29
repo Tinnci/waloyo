@@ -2,6 +2,7 @@ use crate::domain::{Task, TaskId, TaskState};
 use crate::presentation::theme::Theme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use std::time::Duration;
 
 /// A single task item component - the "wind" element
 ///
@@ -50,8 +51,8 @@ impl TaskItem {
 impl RenderOnce for TaskItem {
     fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
         let task_id = self.task.id;
-        let is_done = self.task.is_done();
         let is_completing = self.task.is_completing();
+        let is_done = self.task.is_done();
 
         let content_color = if is_done {
             Theme::text_secondary()
@@ -66,7 +67,6 @@ impl RenderOnce for TaskItem {
         };
 
         let base = div()
-            .id(ElementId::Name(format!("task-{}", task_id.0).into()))
             .w_full()
             .px(px(Theme::PADDING_MD))
             .py(px(Theme::PADDING_SM))
@@ -88,12 +88,32 @@ impl RenderOnce for TaskItem {
                     .child(self.task.content.clone()),
             );
 
-        if let Some(handler) = self.on_complete {
-            base.on_click(move |_event, window, cx| {
-                handler(task_id, window, cx);
-            })
+        let base_with_id = base.id(ElementId::Name(format!("task-static-{}", task_id.0).into()));
+
+        // Add rain drop animation when completing
+        if is_completing {
+            base_with_id
+                .with_animation(
+                    ElementId::Name(format!("rain-drop-{}", task_id.0).into()),
+                    Animation::new(Duration::from_millis(Theme::ANIM_RAIN_DROP))
+                        .with_easing(ease_in_out),
+                    move |element, delta| {
+                        // Rain drop effect: fall down and fade out
+                        let fall_distance = 80.0 * delta;
+                        let opacity_val = 1.0 - (delta * 0.7);
+
+                        element.mt(px(fall_distance)).opacity(opacity_val)
+                    },
+                )
+                .into_any_element()
+        } else if let Some(handler) = self.on_complete {
+            base_with_id
+                .on_click(move |_event, window, cx| {
+                    handler(task_id, window, cx);
+                })
+                .into_any_element()
         } else {
-            base
+            base_with_id.into_any_element()
         }
     }
 }

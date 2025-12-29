@@ -5,3 +5,7 @@
 mod task;
 
 pub use task::*;
+
+/// Event emitted when a new task is submitted
+#[derive(Clone)]
+pub struct TaskSubmitted(pub String);
