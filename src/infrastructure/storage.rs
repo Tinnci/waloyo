@@ -10,6 +10,8 @@ use std::time::Instant;
 pub struct TaskData {
     pub id: u64,
     pub content: String,
+    #[serde(default)]
+    pub notes: Option<String>,
     pub state: String,
     pub priority: String,
     pub due_date: Option<chrono::DateTime<chrono::Local>>,
@@ -20,6 +22,7 @@ impl From<&Task> for TaskData {
         Self {
             id: task.id.0,
             content: task.content.to_string(),
+            notes: task.notes.clone(),
             state: match task.state {
                 TaskState::Pending => "pending".to_string(),
                 TaskState::Completing => "pending".to_string(),
@@ -41,6 +44,7 @@ impl TaskData {
         Task {
             id: TaskId(self.id),
             content: SharedString::from(self.content),
+            notes: self.notes,
             state: match self.state.as_str() {
                 "done" => TaskState::Done,
                 _ => TaskState::Pending,

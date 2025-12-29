@@ -54,6 +54,8 @@ pub struct Task {
     pub id: TaskId,
     /// The content/description of the task
     pub content: SharedString,
+    /// Optional notes - deeper context, thoughts, or reflections
+    pub notes: Option<String>,
     /// Current state of the task
     pub state: TaskState,
     /// Priority level
@@ -73,6 +75,7 @@ impl Task {
         Self {
             id: TaskId::new(),
             content: content.into(),
+            notes: None,
             state: TaskState::Pending,
             priority: TaskPriority::default(),
             due_date: None,
