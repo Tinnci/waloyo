@@ -68,16 +68,21 @@ cargo run
 
 ## 开发路线图
 
+详见 [ROADMAP.md](ROADMAP.md) 查看完整规划。
+
+### 当前进度 (v0.1.0)
+
 - [x] 基础 DDD 架构
 - [x] Task 领域模型
 - [x] TaskItem 组件
 - [x] TaskListView 视图
 - [x] Wind & Rain 主题
-- [ ] Rain Drop 完成动画
+- [x] Rain Drop 完成动画 ✨
+- [x] 任务输入功能 ✨
 - [ ] Wind Sway 待办动画
 - [ ] Clear Sky 庆祝效果
 - [ ] 任务持久化
-- [ ] 任务输入功能
+- [ ] 任务删除
 
 ## License
 
