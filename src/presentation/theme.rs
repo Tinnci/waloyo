@@ -1,4 +1,4 @@
-use gpui::{rgb, Rgba};
+use gpui::{rgb, rgba, Rgba};
 
 /// Waloyo Theme - "Wind & Rain" color palette
 ///
@@ -65,6 +65,36 @@ impl Theme {
     /// Done state - clear sky green
     pub fn state_done() -> Rgba {
         rgb(0x9ece6a)
+    }
+
+    /// High priority - storm red
+    pub fn priority_high() -> Rgba {
+        rgb(0xf7768e)
+    }
+
+    /// High priority background - 10% opacity storm red
+    pub fn priority_high_bg() -> Rgba {
+        rgba(0xf7768e1a)
+    }
+
+    /// Medium priority - lightning yellow
+    pub fn priority_medium() -> Rgba {
+        rgb(0xe0af68)
+    }
+
+    /// Medium priority background - 10% opacity lightning yellow
+    pub fn priority_medium_bg() -> Rgba {
+        rgba(0xe0af681a)
+    }
+
+    /// Low priority - gentle breeze
+    pub fn priority_low() -> Rgba {
+        rgb(0x565f89)
+    }
+
+    /// Low priority background - 10% opacity gentle breeze
+    pub fn priority_low_bg() -> Rgba {
+        rgba(0x565f891a)
     }
 
     // ═══════════════════════════════════════════════════════════════════

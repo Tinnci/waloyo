@@ -11,6 +11,8 @@ pub struct TaskData {
     pub id: u64,
     pub content: String,
     pub state: String,
+    pub priority: String,
+    pub due_date: Option<chrono::DateTime<chrono::Local>>,
 }
 
 impl From<&Task> for TaskData {
@@ -20,9 +22,15 @@ impl From<&Task> for TaskData {
             content: task.content.to_string(),
             state: match task.state {
                 TaskState::Pending => "pending".to_string(),
-                TaskState::Completing => "pending".to_string(), // Save as pending since completing is transient
+                TaskState::Completing => "pending".to_string(),
                 TaskState::Done => "done".to_string(),
             },
+            priority: match task.priority {
+                crate::domain::TaskPriority::Low => "low".to_string(),
+                crate::domain::TaskPriority::Medium => "medium".to_string(),
+                crate::domain::TaskPriority::High => "high".to_string(),
+            },
+            due_date: task.due_date,
         }
     }
 }
@@ -37,6 +45,12 @@ impl TaskData {
                 "done" => TaskState::Done,
                 _ => TaskState::Pending,
             },
+            priority: match self.priority.as_str() {
+                "high" => crate::domain::TaskPriority::High,
+                "medium" => crate::domain::TaskPriority::Medium,
+                _ => crate::domain::TaskPriority::Low,
+            },
+            due_date: self.due_date,
             created_at: now,
             updated_at: now,
         }

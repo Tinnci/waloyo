@@ -35,6 +35,18 @@ impl Default for TaskId {
     }
 }
 
+/// Priority level for a task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub enum TaskPriority {
+    /// Normal priority, like a gentle breeze
+    #[default]
+    Low,
+    /// Medium priority, like a steady wind
+    Medium,
+    /// High priority, like a storm brew
+    High,
+}
+
 /// A task entity representing something to be overcome.
 #[derive(Debug, Clone)]
 pub struct Task {
@@ -44,6 +56,10 @@ pub struct Task {
     pub content: SharedString,
     /// Current state of the task
     pub state: TaskState,
+    /// Priority level
+    pub priority: TaskPriority,
+    /// Optional due date
+    pub due_date: Option<chrono::DateTime<chrono::Local>>,
     /// When the task was created
     pub created_at: Instant,
     /// When the task state last changed
@@ -58,6 +74,8 @@ impl Task {
             id: TaskId::new(),
             content: content.into(),
             state: TaskState::Pending,
+            priority: TaskPriority::default(),
+            due_date: None,
             created_at: now,
             updated_at: now,
         }

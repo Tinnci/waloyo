@@ -1,5 +1,6 @@
 use crate::domain::{Task, TaskId, TaskState};
 use crate::infrastructure::TaskStorage;
+use chrono;
 
 #[derive(Clone)]
 enum TaskAction {
@@ -41,11 +42,11 @@ impl TaskService {
                 storage,
                 history: Vec::new(),
             };
-            service.add_task("Learn GPUI fundamentals");
-            service.add_task("Build Waloyo task manager");
-            service.add_task("Implement rain drop animation");
-            service.add_task("Add wind swaying effect");
-            service.add_task("Create clear sky celebration");
+            service.add_task("Learn GPUI fundamentals !m");
+            service.add_task("Build Waloyo task manager !h @today");
+            service.add_task("Implement rain drop animation @tomorrow");
+            service.add_task("Add wind swaying effect !l");
+            service.add_task("Create clear sky celebration !h");
             // Clear history after initial defaults to avoid undoing them
             service.history.clear();
             return service;
@@ -64,9 +65,36 @@ impl TaskService {
         }
     }
 
-    /// Add a new task
+    /// Add a new task with smart parsing for metadata
     pub fn add_task(&mut self, content: impl Into<gpui::SharedString>) -> TaskId {
-        let task = Task::new(content);
+        let content_str = content.into();
+        let mut task = Task::new(content_str.clone());
+        let mut cleaned_content = content_str.to_string();
+
+        // Simple parsing for priority: !h, !m, !l
+        if cleaned_content.contains("!h") {
+            task.priority = crate::domain::TaskPriority::High;
+            cleaned_content = cleaned_content.replace("!h", "").trim().to_string();
+        } else if cleaned_content.contains("!m") {
+            task.priority = crate::domain::TaskPriority::Medium;
+            cleaned_content = cleaned_content.replace("!m", "").trim().to_string();
+        } else if cleaned_content.contains("!l") {
+            task.priority = crate::domain::TaskPriority::Low;
+            cleaned_content = cleaned_content.replace("!l", "").trim().to_string();
+        }
+
+        // Simple parsing for due date: @today, @tomorrow
+        let now = chrono::Local::now();
+        if cleaned_content.contains("@today") {
+            task.due_date = Some(now);
+            cleaned_content = cleaned_content.replace("@today", "").trim().to_string();
+        } else if cleaned_content.contains("@tomorrow") {
+            task.due_date = Some(now + chrono::Duration::days(1));
+            cleaned_content = cleaned_content.replace("@tomorrow", "").trim().to_string();
+        }
+
+        task.content = gpui::SharedString::from(cleaned_content);
+
         let id = task.id;
         self.tasks.push(task);
         self.history.push(TaskAction::Add(id));

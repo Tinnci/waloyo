@@ -98,11 +98,81 @@ impl RenderOnce for TaskItem {
         }
 
         // Build Content Area
-        let mut content_area = div()
-            .flex_1()
-            .text_color(content_color)
-            .when(is_done, |this| this.line_through())
-            .child(self.task.content.clone());
+        let mut content_area = div().flex_1().flex().flex_col().gap_1().child(
+            div()
+                .text_color(content_color)
+                .when(is_done, |this| this.line_through())
+                .child(self.task.content.clone()),
+        );
+
+        // Metadata row (Priority & Due Date)
+        if !is_done && !is_completing {
+            let (priority_color, priority_bg) = match self.task.priority {
+                crate::domain::TaskPriority::High => {
+                    (Theme::priority_high(), Theme::priority_high_bg())
+                }
+                crate::domain::TaskPriority::Medium => {
+                    (Theme::priority_medium(), Theme::priority_medium_bg())
+                }
+                crate::domain::TaskPriority::Low => {
+                    (Theme::priority_low(), Theme::priority_low_bg())
+                }
+            };
+
+            let mut meta_row = div().flex().items_center().gap_3();
+
+            // Priority dot
+            meta_row = meta_row.child(
+                div()
+                    .px_1()
+                    .py_0()
+                    .rounded(px(Theme::RADIUS_SM))
+                    .bg(priority_bg)
+                    .text_color(priority_color)
+                    .text_xs()
+                    .child(match self.task.priority {
+                        crate::domain::TaskPriority::High => "High",
+                        crate::domain::TaskPriority::Medium => "Medium",
+                        crate::domain::TaskPriority::Low => "Low",
+                    }),
+            );
+
+            // Due Date
+            if let Some(due_date) = self.task.due_date {
+                let now = chrono::Local::now();
+                let today = now.date_naive();
+                let due_naive = due_date.date_naive();
+
+                let date_str = if due_naive == today {
+                    "Today".to_string()
+                } else if due_naive == today.succ_opt().unwrap_or(today) {
+                    "Tomorrow".to_string()
+                } else if due_naive < today {
+                    format!("Overdue: {}", due_naive.format("%m/%d"))
+                } else {
+                    due_naive.format("%m/%d").to_string()
+                };
+
+                let is_overdue = due_naive < today;
+
+                meta_row = meta_row.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .text_xs()
+                        .text_color(if is_overdue {
+                            Theme::accent_error()
+                        } else {
+                            Theme::text_secondary()
+                        })
+                        .child("📅")
+                        .child(date_str),
+                );
+            }
+
+            content_area = content_area.child(meta_row);
+        }
 
         if is_pending {
             if let Some(handler) = on_click_content {
