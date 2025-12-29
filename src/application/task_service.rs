@@ -124,6 +124,18 @@ impl TaskService {
         }
     }
 
+    /// Update task notes
+    pub fn update_task_notes(&mut self, id: TaskId, notes: Option<String>) -> bool {
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.id == id) {
+            task.notes = notes;
+            task.updated_at = std::time::Instant::now();
+            self.save();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Get all pending tasks
     #[allow(dead_code)]
     pub fn pending_tasks(&self) -> impl Iterator<Item = &Task> {

@@ -171,6 +171,19 @@ impl RenderOnce for TaskItem {
                 );
             }
 
+            // Notes indicator
+            if self.task.notes.is_some() {
+                meta_row = meta_row.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .text_xs()
+                        .text_color(Theme::text_secondary())
+                        .child("📝"),
+                );
+            }
+
             content_area = content_area.child(meta_row);
         }
 
